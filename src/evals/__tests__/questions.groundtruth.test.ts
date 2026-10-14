@@ -98,7 +98,7 @@ describe("eval question ground truth", () => {
 
     const may = findRuns(runs, { startDate: "2026-05-01", endDate: "2026-05-31" });
     const mayTotal = may.reduce((sum, r) => sum + distanceMiles(r), 0);
-    assert.ok(Math.abs(mayTotal - 74.8) < 0.5);
+    assert.ok(Math.abs(mayTotal - 72.7) < 0.5);
     assert.ok(byId("total-miles-may").checkAnswer(`You ran about ${mayTotal.toFixed(1)} mi in May 2026.`));
 
     const june = findRuns(runs, { startDate: "2026-06-01", endDate: "2026-06-30" });

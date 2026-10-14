@@ -246,6 +246,33 @@ later -- worth keeping a copy of a good run for the Phase 6 blog post.
   elevation data is present. Neither bug would have shown up from reading
   the code; both showed up from trying to grade an answer against it.
   That's the actual argument for evals, not just the one in the README.
+- **A real-data bug the sample dataset couldn't catch: evening runs dated
+  a day late.** `parseStravaDate` used to pull the calendar date via
+  `parsed.toISOString().slice(0, 10)`. Strava's CSV export has no
+  timezone marker — it's the runner's local start time — so
+  `new Date(raw)` parses it in the local timezone of whatever machine
+  runs the server. `.toISOString()` then converts that through UTC before
+  truncating to a date, which silently rolls any evening run onto the
+  *next* calendar day for anyone west of UTC (most of the US): a 7:30pm
+  run in Seattle becomes "2:30am UTC the next day". Every test fixture
+  and the synthetic sample data happened to use morning timestamps, so
+  this passed 94/94 tests and shipped in Phase 4 — it only surfaced when
+  a real user pointed the server at her own Strava export and noticed a
+  run was dated a day off. Fixed by reading the date from the parsed
+  `Date` object's local getters (`getFullYear`/`getMonth`/`getDate`)
+  instead of round-tripping through UTC, with a regression test that
+  forces `process.env.TZ` to `America/Los_Angeles` to reproduce the
+  rollover deterministically regardless of what timezone the test runner
+  itself is in. The fix also shifted a handful of runs across month/week
+  boundaries in the sample data, which `questions.groundtruth.test.ts`
+  caught immediately — three eval fixtures (`total-miles-may`,
+  `training-load-as-of-date`, `recent-three-runs`) had their expected
+  values regenerated from the corrected code rather than hand-adjusted,
+  exactly the drift-detection this test exists for. A good reminder that
+  a synthetic dataset, however large, can't cover every timezone a test
+  machine might run in — this one only runs on the server operator's own
+  machine, which is what made the local-time assumption fixable rather
+  than a design flaw.
 - **The eval set is a grounding check on tool outputs, not a benchmark of
   the model.** `checkAnswer` looks for the right numbers in the final
   text, and `toolsCoverExpected` checks the right tools got called — it

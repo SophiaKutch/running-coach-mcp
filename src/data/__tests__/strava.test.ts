@@ -81,6 +81,26 @@ describe("parseStravaCsv", () => {
     assert.equal(skipped[0]!.reason, "missing distance or moving time");
   });
 
+  it("keeps the runner's local calendar date for an evening run, not the UTC-shifted one (regression test)", () => {
+    // This is the actual bug: an evening run in a negative-UTC-offset
+    // timezone (e.g. Seattle, UTC-7/-8) used to come out dated the
+    // *next* day, because the old code pulled the date via
+    // `.toISOString()`, which converts through UTC before truncating to
+    // YYYY-MM-DD. 7:30pm Pacific is 2:30am UTC the next calendar day.
+    const originalTz = process.env.TZ;
+    process.env.TZ = "America/Los_Angeles";
+    try {
+      const { runs } = parseStravaCsv(
+        csv('1,"Oct 13, 2026, 7:30:00 PM",Evening Run,Run,1800,1750,8000,,,50')
+      );
+      assert.equal(runs.length, 1);
+      assert.equal(runs[0]!.date, "2026-10-13", "should keep Oct 13, the runner's actual local date");
+    } finally {
+      if (originalTz === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTz;
+    }
+  });
+
   it("sorts normalized runs by date ascending", () => {
     const { runs } = parseStravaCsv(
       csv(

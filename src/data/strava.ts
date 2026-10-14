@@ -112,8 +112,24 @@ function parseStravaDate(raw: string | undefined): { dateOnly: string; iso: stri
   if (!raw) return undefined;
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return undefined;
+  // Strava's "Activity Date" column has no timezone marker -- it's the
+  // activity's local start time, in whatever timezone the exporting
+  // account is in. `new Date(raw)` parses that string using *this
+  // process's* local timezone, which is the right interpretation as long
+  // as the server runs on the runner's own machine (true for a local
+  // stdio MCP server, the only way this project runs).
+  //
+  // The bug this guards against: pulling the calendar date via
+  // `.toISOString()` converts through UTC first, which silently shifts
+  // any evening run onto the *next* calendar day for anyone west of UTC
+  // (most of the US) -- a 7:30pm run in Seattle becomes "2:30am UTC the
+  // next day". Using the local getters instead keeps the date the runner
+  // actually experienced.
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
   return {
-    dateOnly: parsed.toISOString().slice(0, 10),
+    dateOnly: `${year}-${month}-${day}`,
     iso: parsed.toISOString(),
   };
 }

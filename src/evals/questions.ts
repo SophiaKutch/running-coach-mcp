@@ -88,8 +88,8 @@ export const questions: (EvalQuestion & { expectedlyHard?: boolean })[] = [
     id: "training-load-as-of-date",
     question: "As of October 1, 2026, what was my training load?",
     expectedTools: ["training_load"],
-    rationale: "As of 2026-10-01, ratio ~1.07, classified sustainable.",
-    checkAnswer: (a) => containsAny(a, ["sustainable"]) && containsNumberNear(a, 1.07, 0.03),
+    rationale: "As of 2026-10-01, ratio ~1.10, classified sustainable.",
+    checkAnswer: (a) => containsAny(a, ["sustainable"]) && containsNumberNear(a, 1.1, 0.03),
   },
   {
     id: "trail-run-count",
@@ -117,8 +117,8 @@ export const questions: (EvalQuestion & { expectedlyHard?: boolean })[] = [
     question: "How many total miles did I run in May 2026?",
     expectedTools: ["find_runs"],
     expectedlyHard: true,
-    rationale: "May 2026 total is 74.8 mi across 25 runs -- find_runs returns a list, so this requires the model to sum 25 numbers itself.",
-    checkAnswer: (a) => containsNumberNear(a, 74.8, 3),
+    rationale: "May 2026 total is 72.7 mi -- find_runs returns a list, so this requires the model to sum the returned numbers itself.",
+    checkAnswer: (a) => containsNumberNear(a, 72.7, 3),
   },
   {
     id: "recent-runs",
@@ -131,8 +131,8 @@ export const questions: (EvalQuestion & { expectedlyHard?: boolean })[] = [
     id: "recent-three-runs",
     question: "Show me my 3 most recent runs with their dates and distances.",
     expectedTools: ["get_recent_runs"],
-    rationale: "The 3 most recent runs are 2026-10-11, 2026-10-10, and 2026-10-09.",
-    checkAnswer: (a) => containsAny(a, ["2026-10-11", "october 11"]) && containsAny(a, ["2026-10-09", "october 9"]),
+    rationale: "The 3 most recent runs are 2026-10-11, 2026-10-10, and 2026-10-08.",
+    checkAnswer: (a) => containsAny(a, ["2026-10-11", "october 11"]) && containsAny(a, ["2026-10-08", "october 8"]),
   },
   {
     id: "fast-runs-count",
