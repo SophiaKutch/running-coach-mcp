@@ -7,6 +7,7 @@ import {
   formatLongRunWeek,
   formatPaceTrend,
   formatPersonalRecords,
+  formatRaceTime,
   formatRunLine,
   formatRunsList,
   formatTrainingLoad,
@@ -45,11 +46,17 @@ describe("toRunView / formatRunLine", () => {
     assert.match(line, /10\.00 mi/);
     assert.match(line, /8:00\/mi/);
     assert.match(line, /avg HR 145/);
+    assert.match(line, /\+328 ft gain/);
   });
 
   it("falls back to a humanized type when the run has no name", () => {
     const line = formatRunLine(makeRun({ name: undefined, type: "trail_run" }));
     assert.match(line, /Trail Run/);
+  });
+
+  it("omits the elevation segment when elevation data is missing", () => {
+    const line = formatRunLine(makeRun({ elevationGainMeters: undefined }));
+    assert.doesNotMatch(line, /ft gain/);
   });
 });
 
@@ -70,6 +77,18 @@ describe("formatDuration", () => {
   });
   it("formats durations over an hour as h and zero-padded m", () => {
     assert.equal(formatDuration(5400), "1h30m");
+  });
+});
+
+describe("formatRaceTime", () => {
+  it("formats sub-hour times as m:ss, unpadded minutes", () => {
+    assert.equal(formatRaceTime(1467), "24:27"); // a 5K PR, not rounded away to "24m"
+  });
+  it("formats hour-plus times as h:mm:ss", () => {
+    assert.equal(formatRaceTime(7365), "2:02:45"); // a half marathon finish
+  });
+  it("zero-pads seconds under 10", () => {
+    assert.equal(formatRaceTime(605), "10:05");
   });
 });
 
@@ -188,7 +207,7 @@ describe("formatPersonalRecords", () => {
     const text = formatPersonalRecords(personalRecords(runs));
     assert.match(text, /Longest run/);
     assert.match(text, /Fastest sustained pace/);
-    assert.match(text, /Best 5K/);
+    assert.match(text, /Best 5K: 20:00/); // 1200 seconds, exact mm:ss, not rounded to "20m"
     assert.match(text, /Highest-mileage week/);
   });
 

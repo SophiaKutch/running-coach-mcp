@@ -61,6 +61,9 @@ export function formatRunLine(run: Run): string {
   if (view.averageHeartRate !== undefined) {
     parts.push(`avg HR ${Math.round(view.averageHeartRate)}`);
   }
+  if (view.elevationGainFeet !== undefined) {
+    parts.push(`+${Math.round(view.elevationGainFeet)} ft gain`);
+  }
   return parts.join(" — ");
 }
 
@@ -178,7 +181,7 @@ export function formatPersonalRecords(result: PersonalRecords): string {
   }
   for (const [distance, effort] of Object.entries(result.bestEffortsByDistance)) {
     if (!effort) continue;
-    lines.push(`Best ${distance}: ${formatDuration(effort.timeSeconds)} (${formatRunLine(effort.run)})`);
+    lines.push(`Best ${distance}: ${formatRaceTime(effort.timeSeconds)} (${formatRunLine(effort.run)})`);
   }
   if (result.highestMileageWeek) {
     lines.push(
@@ -208,6 +211,24 @@ export function formatDuration(totalSeconds: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return hours > 0 ? `${hours}h${minutes.toString().padStart(2, "0")}m` : `${minutes}m`;
+}
+
+/**
+ * Second-precision "mm:ss" (or "h:mm:ss") formatting for a race/effort time.
+ * `formatDuration` above rounds to the nearest minute, which is fine for a
+ * weekly moving-time total but was silently throwing away exactly the
+ * precision a runner cares about on a personal-record time (a 24:27 5K
+ * becoming "24m" loses real information) -- this exists specifically so
+ * `formatPersonalRecords` doesn't make that mistake.
+ */
+export function formatRaceTime(totalSeconds: number): string {
+  const rounded = Math.round(totalSeconds);
+  const hours = Math.floor(rounded / 3600);
+  const minutes = Math.floor((rounded % 3600) / 60);
+  const seconds = rounded % 60;
+  const minutesLabel = hours > 0 ? minutes.toString().padStart(2, "0") : minutes.toString();
+  const secondsLabel = seconds.toString().padStart(2, "0");
+  return hours > 0 ? `${hours}:${minutesLabel}:${secondsLabel}` : `${minutesLabel}:${secondsLabel}`;
 }
 
 function round(value: number, decimals: number): number {

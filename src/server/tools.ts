@@ -1,29 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import type { Run } from "../data/types.js";
-import { formatPace } from "../data/derived.js";
-import {
-  addDays,
-  comparePeriods,
-  findRuns,
-  getRecentRuns,
-  getWeekEnd,
-  getWeekStart,
-  heartRateZones,
-  longRunProgression,
-  paceTrends,
-  personalRecords,
-  trainingLoad,
-  weeklyMileage,
-} from "../analysis/index.js";
-import {
-  formatComparePeriods,
-  formatHeartRateZones,
-  formatLongRunWeek,
-  formatPersonalRecords,
-  formatRunsList,
-  formatTrainingLoad,
-  formatWeeklyMileage,
-} from "./formatting.js";
+import { comparePeriods, findRuns, getRecentRuns, personalRecords, trainingLoad } from "../analysis/index.js";
+import { formatComparePeriods, formatPersonalRecords, formatRunsList, formatTrainingLoad } from "./formatting.js";
+import { buildWeeklySummary } from "./weeklySummary.js";
+import { resolvePeriodRanges } from "./comparePeriodsHelper.js";
 import {
   ComparePeriodsInput,
   FindRunsInput,
@@ -85,38 +65,8 @@ export function registerTools(server: McpServer, runs: Run[]): void {
       inputSchema: WeeklySummaryInput,
     },
     async ({ weekStart, maxHeartRate }) => {
-      const weeks = weeklyMileage(runs);
-      if (weeks.length === 0) {
-        return { content: [{ type: "text", text: "No runs in the training log." }] };
-      }
-
-      const targetWeekStart = weekStart ? getWeekStart(weekStart) : weeks[weeks.length - 1]!.weekStart;
-      const mileageWeek = weeks.find((w) => w.weekStart === targetWeekStart);
-      if (!mileageWeek) {
-        return {
-          content: [{ type: "text", text: `No runs found for the week of ${targetWeekStart}.` }],
-          isError: true,
-        };
-      }
-
-      const lines = [formatWeeklyMileage(mileageWeek)];
-
-      const paceWeek = paceTrends(runs).weeks.find((w) => w.weekStart === targetWeekStart);
-      if (paceWeek?.averagePaceSecondsPerMile !== undefined) {
-        lines.push(`Average pace: ${formatPace(paceWeek.averagePaceSecondsPerMile)}/mi`);
-      }
-
-      const longRunWeek = longRunProgression(runs).find((w) => w.weekStart === targetWeekStart);
-      if (longRunWeek) {
-        lines.push(formatLongRunWeek(longRunWeek));
-      }
-
-      if (maxHeartRate !== undefined) {
-        const weekRuns = findRuns(runs, { startDate: targetWeekStart, endDate: getWeekEnd(targetWeekStart) });
-        lines.push(formatHeartRateZones(heartRateZones(weekRuns, maxHeartRate)));
-      }
-
-      return { content: [{ type: "text", text: lines.join("\n") }] };
+      const { text, isError } = buildWeeklySummary(runs, { weekStart, maxHeartRate });
+      return isError ? { content: [{ type: "text", text }], isError: true } : { content: [{ type: "text", text }] };
     }
   );
 
@@ -129,24 +79,12 @@ export function registerTools(server: McpServer, runs: Run[]): void {
         "or just windowDays to compare the last N days against the N days before that.",
       inputSchema: ComparePeriodsInput,
     },
-    async ({ periodAStart, periodAEnd, periodBStart, periodBEnd, windowDays }) => {
-      let rangeA: { start: string; end: string };
-      let rangeB: { start: string; end: string };
-
-      if (periodAStart && periodAEnd && periodBStart && periodBEnd) {
-        rangeA = { start: periodAStart, end: periodAEnd };
-        rangeB = { start: periodBStart, end: periodBEnd };
-      } else {
-        const latest = getRecentRuns(runs, 1)[0]?.date;
-        if (!latest) {
-          return { content: [{ type: "text", text: "No runs in the training log." }] };
-        }
-        const days = windowDays ?? 28;
-        rangeA = { start: addDays(latest, -(days - 1)), end: latest };
-        rangeB = { start: addDays(latest, -(2 * days - 1)), end: addDays(latest, -days) };
+    async (input) => {
+      const ranges = resolvePeriodRanges(runs, input);
+      if (!ranges) {
+        return { content: [{ type: "text", text: "No runs in the training log." }] };
       }
-
-      const result = comparePeriods(runs, rangeA, rangeB);
+      const result = comparePeriods(runs, ranges.rangeA, ranges.rangeB);
       return { content: [{ type: "text", text: formatComparePeriods(result) }] };
     }
   );

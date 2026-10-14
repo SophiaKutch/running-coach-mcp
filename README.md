@@ -6,9 +6,9 @@ I ready to bump my long run?" and get an answer grounded in your actual
 numbers — not generic training advice.
 
 **Status: Phase 1 (data layer) + Phase 2 (analysis functions) + Phase 3
-(MCP server).** Evals and the full tutorial writeup come in later phases.
-This README will grow into a proper quickstart as those land; for now it
-documents what's here.
+(MCP server) + Phase 4 (evals).** The full tutorial writeup is the last
+phase left. This README will grow into a proper quickstart as that lands;
+for now it documents what's here.
 
 ## What's here right now
 
@@ -33,10 +33,16 @@ documents what's here.
   makes them straightforward to unit test and safe to hand to an MCP tool:
   the model only ever sees numbers this code already computed and
   verified, never numbers it has to compute itself from a raw run list.
-- `src/server/` — the MCP server. `formatting.ts` is pure and unit tested
-  (turns analysis results into text); `schemas.ts`, `tools.ts`,
-  `resources.ts`, `prompts.ts`, and `index.ts` wire those up to the
+- `src/server/` — the MCP server. `formatting.ts`, `weeklySummary.ts`, and
+  `comparePeriodsHelper.ts` are pure and unit tested (they build the actual
+  response text/logic); `schemas.ts`, `tools.ts`, `resources.ts`,
+  `prompts.ts`, and `index.ts` wire those up to the
   `@modelcontextprotocol/server` SDK — see "Running the MCP server" below.
+- `src/evals/` — the grounding check. `questions.ts` has 18 questions with
+  ground truth computed directly from the sample dataset; `grading.ts` is
+  the pure scoring logic; `runEvals.ts` is the harness that actually asks
+  Claude the questions with this server's tools available and grades the
+  results — see "Running the evals" below.
 
 ## Using your own data
 
@@ -132,7 +138,8 @@ block to whichever config above you're using:
 
 ### What's been verified where
 
-Everything under `src/data`, `src/analysis`, and `src/server/formatting.ts`
+Everything under `src/data`, `src/analysis`, and the pure parts of
+`src/server` (`formatting.ts`, `weeklySummary.ts`, `comparePeriodsHelper.ts`)
 is unit tested and was verified in the sandbox this project was built in —
 no internet access there, by design, which is also why that code has zero
 runtime dependencies. `src/server/schemas.ts`, `tools.ts`, `resources.ts`,
@@ -142,6 +149,47 @@ installed in that sandbox, so this layer is written carefully against the
 current SDK docs but has only been syntax-checked, not run. Run
 `npm run inspect` first and confirm each tool/resource/prompt looks right
 before wiring this into a host you rely on.
+
+## Running the evals
+
+The question set lives in `src/evals/questions.ts`: 18 questions whose
+correct answers were computed by actually running this project's own
+analysis functions against `data/sample/activities.csv` (not hand-typed) --
+`npm test` includes `questions.groundtruth.test.ts`, which re-derives every
+expected value from the live code and fails if the fixtures and the code
+ever drift apart.
+
+Three questions are marked `expectedlyHard` in `questions.ts`: `find_runs`
+returns a list, not an aggregate, so "how many total miles in May" or
+"total elevation gain across my trail runs" requires the model to sum 15-25
+numbers itself from tool output, rather than reading one field. They're
+kept in the set on purpose -- a model getting one of these wrong is a real
+finding about where a raw-list tool stops being enough, which is exactly
+the kind of limit this phase exists to surface.
+
+`npm run eval` is the harness that actually runs the check: it spawns the
+MCP server, asks Claude each question with the server's tools available,
+tracks which tools got called, and grades the final answer. This calls the
+real Anthropic API and needs your own key:
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... ANTHROPIC_MODEL=claude-sonnet-4-5 npm run eval
+```
+
+`ANTHROPIC_MODEL` isn't defaulted in code deliberately -- a model id
+hardcoded today would likely be stale whenever this is actually run; check
+[docs.claude.com](https://docs.claude.com) for a current one. This also
+means the eval script itself (`src/evals/runEvals.ts`) could not be
+executed in the sandbox this project was built in: no network access to
+call the Anthropic API, and `@anthropic-ai/sdk` / `@modelcontextprotocol/client`
+couldn't be installed either. It's written against both SDKs' current docs
+and syntax-checked, but it's genuinely unverified until you run it --
+expect to debug it a little on the first pass, the same way you would any
+new integration test.
+
+Each run prints a pass/fail report to the terminal and writes
+`eval-results/latest.md` (gitignored) with a results table you can reference
+later -- worth keeping a copy of a good run for the Phase 6 blog post.
 
 ## Design notes (for anyone reading this as a portfolio project)
 
@@ -184,3 +232,24 @@ before wiring this into a host you rely on.
   and a schema mismatch would fail at runtime in a way this project had
   no way to catch here. Worth adding once Phase 4's evals are in place to
   catch a regression if one slips in.
+- **Computing eval ground truth found two real bugs before any model ever
+  saw this server.** `formatPersonalRecords` was feeding PR times through
+  `formatDuration`, a minute-precision formatter meant for run durations —
+  a 24:27 5K PR displayed as "24m". Writing the ground-truth for
+  `fastest-pace`/`distance-prs` meant computing the real number by hand
+  and noticing it didn't match the server's own text. Fixed by adding
+  `formatRaceTime` (second-precision `mm:ss`/`h:mm:ss`) and switching
+  `formatPersonalRecords` to use it. Separately, no tool surfaced
+  elevation gain anywhere in its output despite it being computed and
+  stored on every run — the `trail-elevation-total` question is what
+  surfaced the gap. Fixed by adding `+N ft gain` to `formatRunLine` when
+  elevation data is present. Neither bug would have shown up from reading
+  the code; both showed up from trying to grade an answer against it.
+  That's the actual argument for evals, not just the one in the README.
+- **The eval set is a grounding check on tool outputs, not a benchmark of
+  the model.** `checkAnswer` looks for the right numbers in the final
+  text, and `toolsCoverExpected` checks the right tools got called — it
+  isn't scoring prose quality, tone, or which exact phrasing the model
+  used. The goal is catching "the server's answer was wrong or
+  incomplete," which is a property of this codebase, not of whichever
+  model happens to be running `npm run eval` that day.
