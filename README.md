@@ -5,9 +5,9 @@ analyze your running data. Ask "How did my training go this month?" or "Am
 I ready to bump my long run?" and get an answer grounded in your actual
 numbers — not generic training advice.
 
-**Status: Phase 1 (data layer) + Phase 2 (analysis functions).** The MCP
-server itself, evals, and full tutorial writeup come in later phases. This
-README will grow into a proper quickstart as those land; for now it
+**Status: Phase 1 (data layer) + Phase 2 (analysis functions) + Phase 3
+(MCP server).** Evals and the full tutorial writeup come in later phases.
+This README will grow into a proper quickstart as those land; for now it
 documents what's here.
 
 ## What's here right now
@@ -27,12 +27,16 @@ documents what's here.
   login, no API keys, and no real personal data.
 - `src/analysis/` — pure functions over normalized `Run[]`: `weeklyMileage`,
   `paceTrends`, `heartRateZones`, `longRunProgression`, `trainingLoad`
-  (acute:chronic workload ratio), and `personalRecords`. None of these
-  touch the filesystem or the network — they take data in and return data
-  out, which is what makes them straightforward to unit test and safe to
-  hand to an MCP tool later: the model will only ever see numbers this
-  code already computed and verified, never numbers it has to compute
-  itself from a raw run list.
+  (acute:chronic workload ratio), `personalRecords`, `getRecentRuns`,
+  `findRuns`, and `comparePeriods`. None of these touch the filesystem or
+  the network — they take data in and return data out, which is what
+  makes them straightforward to unit test and safe to hand to an MCP tool:
+  the model only ever sees numbers this code already computed and
+  verified, never numbers it has to compute itself from a raw run list.
+- `src/server/` — the MCP server. `formatting.ts` is pure and unit tested
+  (turns analysis results into text); `schemas.ts`, `tools.ts`,
+  `resources.ts`, `prompts.ts`, and `index.ts` wire those up to the
+  `@modelcontextprotocol/server` SDK — see "Running the MCP server" below.
 
 ## Using your own data
 
@@ -50,6 +54,94 @@ documents what's here.
 npm install
 npm test
 ```
+
+## Running the MCP server
+
+This project uses the current `@modelcontextprotocol/server` (v2) SDK —
+not the older `@modelcontextprotocol/sdk` package you'll see in a lot of
+existing tutorials. `npm install` pulls it in alongside `zod`.
+
+**Tools:** `get_recent_runs`, `find_runs`, `weekly_summary`,
+`compare_periods`, `training_load`, `personal_records`.
+**Resources:** `training-log://all` (every run as JSON) and
+`training-log://weekly-summary` (a markdown weekly-mileage table).
+**Prompts:** `weekly-review` and `plan-next-4-weeks`.
+
+Run it directly over stdio:
+
+```bash
+npm start
+```
+
+Or point the [MCP Inspector](https://github.com/modelcontextprotocol/inspector)
+at it, to poke at tools/resources/prompts from a browser UI before wiring
+it into a host:
+
+```bash
+npm run inspect
+```
+
+### Connecting it to a host
+
+Replace `/absolute/path/to/running-coach-mcp` below with this project's
+actual path on your machine (`pwd` from inside it will tell you).
+
+**Claude Desktop** — edit (or create)
+`~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "running-coach": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["tsx", "/absolute/path/to/running-coach-mcp/src/server/index.ts"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop after saving.
+
+**Claude Code** — from inside this project's folder:
+
+```bash
+claude mcp add running-coach -- npx tsx src/server/index.ts
+```
+
+**VS Code** — create `.vscode/mcp.json` in this project's folder:
+
+```json
+{
+  "servers": {
+    "running-coach": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["tsx", "src/server/index.ts"]
+    }
+  }
+}
+```
+
+To use your own Strava export instead of the sample data, add an `env`
+block to whichever config above you're using:
+
+```json
+"env": { "RUNNING_COACH_DATA_PATH": "/absolute/path/to/data/private/activities.csv" }
+```
+
+### What's been verified where
+
+Everything under `src/data`, `src/analysis`, and `src/server/formatting.ts`
+is unit tested and was verified in the sandbox this project was built in —
+no internet access there, by design, which is also why that code has zero
+runtime dependencies. `src/server/schemas.ts`, `tools.ts`, `resources.ts`,
+`prompts.ts`, and `index.ts` call directly into the
+`@modelcontextprotocol/server` SDK and `zod`, neither of which could be
+installed in that sandbox, so this layer is written carefully against the
+current SDK docs but has only been syntax-checked, not run. Run
+`npm run inspect` first and confirm each tool/resource/prompt looks right
+before wiring this into a host you rely on.
 
 ## Design notes (for anyone reading this as a portfolio project)
 
@@ -80,3 +172,15 @@ npm test
   implements the acute:chronic workload ratio (7-day load vs. 28-day
   baseline) from sports-science literature, with the commonly-cited
   classification bands — not a personalized risk assessment.
+- **A sixth tool that wasn't in the original plan.** The original Phase 3
+  tool list was 5 tools, but Phase 2 shipped 6 analysis functions —
+  `personalRecords` had nowhere to go. Rather than leave it as dead code,
+  this added a `personal_records` tool so every analysis function Phase 2
+  wrote is actually reachable by the model.
+- **Tool results are plain text, not structured output.** The current SDK
+  supports an `outputSchema` + `structuredContent` pattern alongside text,
+  which would be a nice addition — it was deliberately left out of this
+  phase because it couldn't be verified without the real SDK installed,
+  and a schema mismatch would fail at runtime in a way this project had
+  no way to catch here. Worth adding once Phase 4's evals are in place to
+  catch a regression if one slips in.

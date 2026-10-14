@@ -5,11 +5,16 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "test": "node --import tsx --test src/data/__tests__/*.test.ts src/analysis/__tests__/*.test.ts",
+    "test": "node --import tsx --test src/data/__tests__/*.test.ts src/analysis/__tests__/*.test.ts src/server/__tests__/*.test.ts",
+    "start": "tsx src/server/index.ts",
+    "inspect": "npx @modelcontextprotocol/inspector npx tsx src/server/index.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.3.1",
+    "zod": "^4.6.7"
+  },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2",
