@@ -5,8 +5,8 @@ analyze your running data. Ask "How did my training go this month?" or "Am
 I ready to bump my long run?" and get an answer grounded in your actual
 numbers — not generic training advice.
 
-**Status: Phase 1 (data layer) only.** The MCP server itself, analysis
-functions, evals, and full tutorial writeup come in later phases. This
+**Status: Phase 1 (data layer) + Phase 2 (analysis functions).** The MCP
+server itself, evals, and full tutorial writeup come in later phases. This
 README will grow into a proper quickstart as those land; for now it
 documents what's here.
 
@@ -25,6 +25,14 @@ documents what's here.
 - `data/sample/activities.csv` — a synthetic, anonymized export (157 rows,
   ~6 months of training) so you can clone this repo and run it with no
   login, no API keys, and no real personal data.
+- `src/analysis/` — pure functions over normalized `Run[]`: `weeklyMileage`,
+  `paceTrends`, `heartRateZones`, `longRunProgression`, `trainingLoad`
+  (acute:chronic workload ratio), and `personalRecords`. None of these
+  touch the filesystem or the network — they take data in and return data
+  out, which is what makes them straightforward to unit test and safe to
+  hand to an MCP tool later: the model will only ever see numbers this
+  code already computed and verified, never numbers it has to compute
+  itself from a raw run list.
 
 ## Using your own data
 
@@ -60,3 +68,15 @@ npm test
   simple enough (comma-separated, one quoted column) that this is a
   deliberate, documented trade-off rather than an oversight. Tests run on
   Node's built-in test runner (`node:test`) for the same reason.
+- **Honest about what the data can and can't support.** `heartRateZones`
+  can only classify each *run* by its average heart rate, not report true
+  time-in-zone, because a Strava CSV export has one average-HR number per
+  run rather than a continuous HR stream. The code says so in a comment
+  instead of quietly presenting a more precise-looking number than the
+  data actually supports — the same discipline the Phase 4 evals are
+  meant to check for in the model's answers, applied here to the code
+  that will ground them.
+- **`trainingLoad` is a documented heuristic, not medical advice.** It
+  implements the acute:chronic workload ratio (7-day load vs. 28-day
+  baseline) from sports-science literature, with the commonly-cited
+  classification bands — not a personalized risk assessment.
