@@ -28,6 +28,13 @@ type StravaRow = Record<string, string | undefined>;
  * gives us a plain object per row keyed by header, so unknown columns just
  * aren't referenced. This keeps the parser from breaking every time Strava
  * adds a field, at the cost of ignoring data we don't need yet.
+ *
+ * "Activity Description" (the free-text notes you write on a run) is the
+ * one text column we do read, even though nothing in the numeric analysis
+ * layer touches it -- it's the raw material `src/rag` indexes for semantic
+ * search. A sample export or an older-format export that lacks this
+ * column entirely just leaves every run's `description` undefined, same
+ * as a row with the column present but left blank.
  */
 export function parseStravaCsv(csvText: string): NormalizeResult {
   const rows: StravaRow[] = parseCsv(csvText);
@@ -71,6 +78,7 @@ export function parseStravaCsv(csvText: string): NormalizeResult {
       date: date.dateOnly,
       startTime: date.iso,
       name: row["Activity Name"] || undefined,
+      description: row["Activity Description"] || undefined,
       type: runType,
       distanceMeters,
       movingTimeSeconds,

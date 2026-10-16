@@ -21,6 +21,14 @@ export interface Run {
   startTime?: string;
   /** Human-readable activity name/title from the source, if any. */
   name?: string;
+  /**
+   * Free-text notes the runner wrote on the activity, if any (Strava's
+   * "Activity Description" column). Unlike every other field on this
+   * type, this one isn't meant to be read by a formula -- it's the input
+   * to semantic search in `src/rag`, so a question like "when did my
+   * knee bother me" can find it even with no words in common.
+   */
+  description?: string;
   /** Normalized activity type. Only "run" variants should reach this type. */
   type: RunType;
   distanceMeters: number;

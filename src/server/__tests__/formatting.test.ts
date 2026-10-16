@@ -5,6 +5,7 @@ import {
   formatDuration,
   formatHeartRateZones,
   formatLongRunWeek,
+  formatNoteMatches,
   formatPaceTrend,
   formatPersonalRecords,
   formatRaceTime,
@@ -213,5 +214,45 @@ describe("formatPersonalRecords", () => {
 
   it("handles an empty training log", () => {
     assert.equal(formatPersonalRecords(personalRecords([])), "No runs in the training log yet.");
+  });
+});
+
+describe("formatNoteMatches", () => {
+  it("reports when nothing matched", () => {
+    assert.equal(
+      formatNoteMatches([], []),
+      "No run notes matched well enough to be worth showing. Try rephrasing, or this may just not be something you wrote notes about."
+    );
+  });
+
+  it("shows the run line, the matched text, and the similarity score for each match", () => {
+    const run = makeRun({ id: "knee-run", date: "2026-03-01", name: "Easy Run", distanceMeters: 5 * MILE });
+    const text = formatNoteMatches([{ runId: "knee-run", text: "knee felt a little off", score: 0.812345 }], [run]);
+    assert.match(text, /2026-03-01/);
+    assert.match(text, /Easy Run/);
+    assert.match(text, /"knee felt a little off"/);
+    assert.match(text, /similarity 0\.81/);
+  });
+
+  it("falls back to the run id when the matched run isn't in the given run list", () => {
+    const text = formatNoteMatches([{ runId: "missing-run", text: "some note", score: 0.5 }], []);
+    assert.match(text, /missing-run/);
+    assert.match(text, /run no longer in the log/);
+  });
+
+  it("keeps the ranked order across multiple matches", () => {
+    const runA = makeRun({ id: "a", date: "2026-01-01" });
+    const runB = makeRun({ id: "b", date: "2026-01-02" });
+    const text = formatNoteMatches(
+      [
+        { runId: "a", text: "first", score: 0.9 },
+        { runId: "b", text: "second", score: 0.4 },
+      ],
+      [runA, runB]
+    );
+    const lines = text.split("\n\n");
+    assert.equal(lines.length, 2);
+    assert.match(lines[0]!, /2026-01-01/);
+    assert.match(lines[1]!, /2026-01-02/);
   });
 });

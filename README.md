@@ -6,9 +6,10 @@ I ready to bump my long run?" and get an answer grounded in your actual
 numbers — not generic training advice.
 
 **Status: Phase 1 (data layer) + Phase 2 (analysis functions) + Phase 3
-(MCP server) + Phase 4 (evals).** The full tutorial writeup is the last
-phase left. This README will grow into a proper quickstart as that lands;
-for now it documents what's here.
+(MCP server) + Phase 4 (evals), plus a `search_run_notes` semantic-search
+tool added afterward.** The full tutorial writeup covers Phases 1-4; the
+semantic search tool is documented inline below and in Design Notes. This
+README will keep growing as more lands; for now it documents what's here.
 
 ## What's here right now
 
@@ -38,6 +39,15 @@ for now it documents what's here.
   response text/logic); `schemas.ts`, `tools.ts`, `resources.ts`,
   `prompts.ts`, and `index.ts` wire those up to the
   `@modelcontextprotocol/server` SDK — see "Running the MCP server" below.
+- `src/rag/` — semantic search over the free-text name/description you
+  write on a run, so `search_run_notes` can answer things the numeric
+  analysis layer has no way to: "when did my knee bother me," "which runs
+  were with the club." Embeddings come from a small local model (no API
+  key, no per-call cost); `cosineSimilarity.ts` and `rankByQuery.ts` are
+  pure and unit tested, `noteIndex.ts` disk-caches embeddings by content
+  hash so an unchanged note never gets re-embedded on a later startup, and
+  `embeddings.ts` is the one piece of this project that actually calls the
+  model — see "What's been verified where" below.
 - `src/evals/` — the grounding check. `questions.ts` has 18 questions with
   ground truth computed directly from the sample dataset; `grading.ts` is
   the pure scoring logic; `runEvals.ts` is the harness that actually asks
@@ -68,7 +78,7 @@ not the older `@modelcontextprotocol/sdk` package you'll see in a lot of
 existing tutorials. `npm install` pulls it in alongside `zod`.
 
 **Tools:** `get_recent_runs`, `find_runs`, `weekly_summary`,
-`compare_periods`, `training_load`, `personal_records`.
+`compare_periods`, `training_load`, `personal_records`, `search_run_notes`.
 **Resources:** `training-log://all` (every run as JSON) and
 `training-log://weekly-summary` (a markdown weekly-mileage table).
 **Prompts:** `weekly-review` and `plan-next-4-weeks`.
@@ -149,6 +159,20 @@ installed in that sandbox, so this layer is written carefully against the
 current SDK docs but has only been syntax-checked, not run. Run
 `npm run inspect` first and confirm each tool/resource/prompt looks right
 before wiring this into a host you rely on.
+
+The same split applies inside `src/rag`: `cosineSimilarity.ts`,
+`rankByQuery.ts`, and the caching/indexing logic in `noteIndex.ts` are all
+unit tested with a fake embedding function standing in for the real model
+(see `__tests__/noteIndex.test.ts`), so none of that needed the model
+installed to verify. `embeddings.ts` — the actual call into
+`@huggingface/transformers` and the local ONNX model — is the one file in
+this project that could not be run or even typechecked in that sandbox: no
+npm registry access to install the package, and no access to
+huggingface.co to download the model weights on first use. It's written
+carefully against the package's current documented API, but it's genuinely
+unverified until you run `npm install` and `npm start` yourself, somewhere
+with normal internet access. If `search_run_notes` doesn't behave as
+expected, this is the first file to look at.
 
 ## Running the evals
 
@@ -280,3 +304,45 @@ later -- worth keeping a copy of a good run for the Phase 6 blog post.
   used. The goal is catching "the server's answer was wrong or
   incomplete," which is a property of this codebase, not of whichever
   model happens to be running `npm run eval` that day.
+- **RAG, added after the fact, on data the project already had but never
+  read.** Strava's export includes a free-text "Activity Description" on
+  every run — the sample data and the parser both ignored it, because
+  nothing before `search_run_notes` had a use for unstructured text.
+  Adding semantic search meant: reading that column into the `Run` type
+  (`description?: string`), adding realistic notes to ~15% of the sample
+  data so the feature has something real to search, and building a small
+  retrieval pipeline (embed each run's name+description once, cache the
+  vectors to disk by content hash, embed the query, rank by cosine
+  similarity, drop anything below a minimum-similarity threshold) on top.
+  It's a second, independent capability layered on the existing numeric
+  analysis tools rather than something woven through them — a run with no
+  notes is simply invisible to this tool, and that's fine, because the
+  other six tools never depended on this data existing in the first place.
+- **Local embedding model over a hosted API — the same "clone it and run
+  it" property as Phase 1's sample data, extended to this feature.** A
+  hosted embeddings API would have been less code and no "unverified in
+  this sandbox" caveat above, but it would mean anyone trying this project
+  needs an API key and a per-call cost just to search their own run notes.
+  `@huggingface/transformers` runs a small (~90MB) ONNX sentence-embedding
+  model entirely locally — slower on first run (it has to download the
+  model) and a real new dependency, but no account, no key, and no cost
+  after that, which matters more for a project whose whole pitch is "clone
+  this and point it at your own data."
+- **Minimum similarity threshold, not just top-N.** Nearest-neighbor search
+  always returns *something* — asking `search_run_notes` about a topic
+  nobody ever wrote a note about would otherwise come back with the
+  least-bad match dressed up as a real answer. `rankByQuery.ts` drops
+  anything below a similarity floor (`DEFAULT_MIN_SCORE = 0.3`) and
+  `formatNoteMatches` says plainly when nothing cleared it, instead of
+  presenting a weak match as if it were a confident one — the same
+  "honest about what the data can and can't support" rule `heartRateZones`
+  follows above, applied to a fuzzier kind of data.
+- **The embedding-dependent code is a thin seam, not a tangle.** Both
+  `buildNoteIndex` and `searchNotes` take an injectable embedding function
+  that defaults to the real local model but can be swapped for a fake one
+  in tests — the same dependency-injection split Phase 3 used for the MCP
+  SDK and Phase 4 used for the Claude API client in `runEvals.ts`. Every
+  genuinely interesting decision here (which runs need re-embedding, what
+  the cache key is, what counts as a good-enough match) is ordinary,
+  fully-tested logic; the one call this sandbox genuinely could not run —
+  the model invocation itself — is isolated to a single small file.

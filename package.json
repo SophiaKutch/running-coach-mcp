@@ -5,7 +5,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "test": "node --import tsx --test src/data/__tests__/*.test.ts src/analysis/__tests__/*.test.ts src/server/__tests__/*.test.ts src/evals/__tests__/*.test.ts",
+    "test": "node --import tsx --test src/data/__tests__/*.test.ts src/analysis/__tests__/*.test.ts src/server/__tests__/*.test.ts src/rag/__tests__/*.test.ts src/evals/__tests__/*.test.ts",
     "test:evals-groundtruth": "node --import tsx --test src/evals/__tests__/questions.groundtruth.test.ts",
     "start": "tsx src/server/index.ts",
     "inspect": "npx @modelcontextprotocol/inspector npx tsx src/server/index.ts",
@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
     "@modelcontextprotocol/server": "^2.3.1",
     "zod": "^4.6.7"
   },

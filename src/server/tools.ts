@@ -1,29 +1,43 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import type { Run } from "../data/types.js";
 import { comparePeriods, findRuns, getRecentRuns, personalRecords, trainingLoad } from "../analysis/index.js";
-import { formatComparePeriods, formatPersonalRecords, formatRunsList, formatTrainingLoad } from "./formatting.js";
+import {
+  formatComparePeriods,
+  formatNoteMatches,
+  formatPersonalRecords,
+  formatRunsList,
+  formatTrainingLoad,
+} from "./formatting.js";
 import { buildWeeklySummary } from "./weeklySummary.js";
 import { resolvePeriodRanges } from "./comparePeriodsHelper.js";
+import { searchNotes } from "../rag/noteIndex.js";
+import type { EmbeddedNote } from "../rag/types.js";
 import {
   ComparePeriodsInput,
   FindRunsInput,
   GetRecentRunsInput,
   PersonalRecordsInput,
+  SearchRunNotesInput,
   TrainingLoadInput,
   WeeklySummaryInput,
 } from "./schemas.js";
 
 /** Don't dump an unbounded number of matches back to the model in one tool result. */
 const MAX_RUNS_SHOWN = 50;
+const DEFAULT_NOTE_MATCHES = 5;
 
 /**
- * Registers the six tools this server exposes. Every handler is a thin
+ * Registers the seven tools this server exposes. Every handler is a thin
  * wrapper: validate/default the input, call into `src/analysis` (pure,
  * already unit tested), then hand the result to `src/server/formatting`
  * (also pure, also unit tested) to turn into text. The only untested code
  * path here is the MCP wiring itself -- see README.md for why.
+ *
+ * `noteIndex` is the pre-built semantic search index over run notes (see
+ * `src/rag/noteIndex.ts`); it's built once at startup in `index.ts` and
+ * threaded through here rather than rebuilt per call.
  */
-export function registerTools(server: McpServer, runs: Run[]): void {
+export function registerTools(server: McpServer, runs: Run[], noteIndex: EmbeddedNote[]): void {
   server.registerTool(
     "get_recent_runs",
     {
@@ -116,6 +130,23 @@ export function registerTools(server: McpServer, runs: Run[]): void {
     async () => {
       const result = personalRecords(runs);
       return { content: [{ type: "text", text: formatPersonalRecords(result) }] };
+    }
+  );
+
+  server.registerTool(
+    "search_run_notes",
+    {
+      title: "Search Run Notes",
+      description:
+        "Semantic search over the free-text names/descriptions you wrote on your runs -- the Strava notes the " +
+        "other tools don't look at. Good for questions the numeric data can't answer, like 'when did my knee " +
+        "bother me' or 'which runs were with the club.' Only as good as the notes you actually wrote: if a run " +
+        "has no note, it can't be found this way no matter how specific the query.",
+      inputSchema: SearchRunNotesInput,
+    },
+    async ({ query, limit }) => {
+      const matches = await searchNotes(noteIndex, query, { limit: limit ?? DEFAULT_NOTE_MATCHES });
+      return { content: [{ type: "text", text: formatNoteMatches(matches, runs) }] };
     }
   );
 }

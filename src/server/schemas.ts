@@ -75,3 +75,17 @@ export const TrainingLoadInput = z.object({
 });
 
 export const PersonalRecordsInput = z.object({});
+
+export const SearchRunNotesInput = z.object({
+  query: z
+    .string()
+    .min(1)
+    .describe("What to search for, in plain language, e.g. 'when did my knee bother me' or 'runs with the club'."),
+  limit: z
+    .number()
+    .int()
+    .positive()
+    .max(20)
+    .optional()
+    .describe("How many matching runs to return. Defaults to 5."),
+});

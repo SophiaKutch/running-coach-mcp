@@ -6,7 +6,7 @@ import { loadStravaCsvFile, parseStravaCsv } from "../strava.js";
 import { formatPace, paceSecondsPerMile } from "../derived.js";
 
 const HEADERS =
-  "Activity ID,Activity Date,Activity Name,Activity Type,Elapsed Time,Moving Time,Distance,Max Heart Rate,Average Heart Rate,Elevation Gain";
+  "Activity ID,Activity Date,Activity Name,Activity Type,Elapsed Time,Moving Time,Distance,Max Heart Rate,Average Heart Rate,Elevation Gain,Activity Description";
 
 function csv(...rows: string[]): string {
   return [HEADERS, ...rows].join("\n");
@@ -65,6 +65,27 @@ describe("parseStravaCsv", () => {
     );
     assert.equal(runs[0]!.averageHeartRate, undefined);
     assert.equal(runs[0]!.maxHeartRate, undefined);
+  });
+
+  it("parses Activity Description when present", () => {
+    const { runs } = parseStravaCsv(
+      csv('1,"Apr 13, 2026, 6:30:00 AM",Easy Run,Run,1325,1305,3476,,,36,"Knee felt stiff, cut it short"')
+    );
+    assert.equal(runs[0]!.description, "Knee felt stiff, cut it short");
+  });
+
+  it("leaves description undefined when the column is blank or missing entirely", () => {
+    const { runs: blank } = parseStravaCsv(csv('1,"Apr 13, 2026, 6:30:00 AM",Easy Run,Run,1325,1305,3476,,,36,'));
+    assert.equal(blank[0]!.description, undefined);
+
+    // Older-format exports (and the HEADERS constant used throughout the
+    // rest of this file) may not have the column at all.
+    const oldFormatCsv = [
+      "Activity ID,Activity Date,Activity Name,Activity Type,Elapsed Time,Moving Time,Distance,Max Heart Rate,Average Heart Rate,Elevation Gain",
+      '1,"Apr 13, 2026, 6:30:00 AM",Easy Run,Run,1325,1305,3476,,,36',
+    ].join("\n");
+    const { runs: noColumn } = parseStravaCsv(oldFormatCsv);
+    assert.equal(noColumn[0]!.description, undefined);
   });
 
   it("skips rows with an unparseable or missing Activity Date", () => {

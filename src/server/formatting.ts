@@ -9,6 +9,7 @@ import type {
   WeeklyMileage,
 } from "../analysis/types.js";
 import type { PeriodComparison } from "../analysis/comparePeriods.js";
+import type { NoteMatch } from "../rag/types.js";
 
 /**
  * This whole file is pure, dependency-free, and unit tested on its own:
@@ -191,6 +192,26 @@ export function formatPersonalRecords(result: PersonalRecords): string {
   }
 
   return lines.length > 0 ? lines.join("\n") : "No runs in the training log yet.";
+}
+
+/**
+ * A `NoteMatch` only carries a runId, since the rag layer has no reason to
+ * know about the rest of a run's fields -- so formatting it back into
+ * something readable means joining back against the full run list. `runs`
+ * can be the whole training log; only the matched ids get looked up.
+ */
+export function formatNoteMatches(matches: NoteMatch[], runs: Run[]): string {
+  if (matches.length === 0) {
+    return "No run notes matched well enough to be worth showing. Try rephrasing, or this may just not be something you wrote notes about.";
+  }
+  const runsById = new Map(runs.map((run) => [run.id, run]));
+  return matches
+    .map((match) => {
+      const run = runsById.get(match.runId);
+      const header = run ? formatRunLine(run) : `${match.runId} (run no longer in the log)`;
+      return `${header}\n  "${match.text}" (similarity ${match.score.toFixed(2)})`;
+    })
+    .join("\n\n");
 }
 
 function humanizeType(type: RunType): string {
